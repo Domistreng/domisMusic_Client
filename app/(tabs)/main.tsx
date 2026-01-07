@@ -1,9 +1,12 @@
+// Try graphing / displaying vibrato
+
 import React, { useState, useEffect, useContext } from "react";
 import { View, Button, Text, StyleSheet, Alert } from "react-native";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
 import { io } from "socket.io-client";
 import { UserContext } from '../userContext';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 // Replace this with your server address
 const SOCKET_SERVER_URL = "https://domis.blue:644";
@@ -17,9 +20,8 @@ export default function AudioRecordTab({ userId }) {
 
   const { uniqueId } = useContext(UserContext);
 
-
   useEffect(() => {
-    const generatedId = String(uniqueId)
+    const generatedId = String(uniqueId);
     setThisId(generatedId);
 
     const socketInstance = io(SOCKET_SERVER_URL, {
@@ -27,18 +29,30 @@ export default function AudioRecordTab({ userId }) {
     });
     setSocket(socketInstance);
 
-    // Listen for the server event "Recordings Analyzed"
     socketInstance.on("Recordings Analyzed", () => {
       Alert.alert("Success", "Recording Successfully Analyzed");
     });
 
     return () => {
       if (socketInstance) {
-        socketInstance.off("Recordings Analyzed"); // cleanup listener
+        socketInstance.off("Recordings Analyzed");
         socketInstance.disconnect();
       }
     };
   }, []);
+
+  // Automatically stop recording after 5 minutes and release keep awake
+  useEffect(() => {
+    let keepAwakeTimeout;
+    if (isRecording) {
+      keepAwakeTimeout = setTimeout(() => {
+        if (isRecording) {
+          stopRecording();
+        }
+      }, 5 * 60 * 1000); // 5 minutes
+    }
+    return () => clearTimeout(keepAwakeTimeout);
+  }, [isRecording]);
 
   async function startRecording() {
     try {
@@ -52,7 +66,16 @@ export default function AudioRecordTab({ userId }) {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
-      });
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+        // Set AVAudioSessionModeMeasurement for iOS to disable AGC
+        ios: {
+          AVAudioSessionCategory: Audio.AVAudioSessionCategoryPlayAndRecord,
+          AVAudioSessionCategoryOptions: Audio.AVAudioSessionCategoryOptionMixWithOthers,
+          AVAudioSessionMode: Audio.AVAudioSessionModeMeasurement, 
+        }});
+
+      await activateKeepAwakeAsync();
 
       setStatusMessage("Starting recording...");
       const recordingOptions = {
@@ -65,11 +88,12 @@ export default function AudioRecordTab({ userId }) {
           bitRate: 128000,
         },
         ios: {
-          extension: ".caf",
-          audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_HIGH,
+          extension: ".wav",
+          outputFormat: Audio.RECORDING_OPTION_IOS_OUTPUT_FORMAT_LINEARPCM,
+          audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_MAX,
           sampleRate: 44100,
-          numberOfChannels: 2,
-          bitRate: 128000,
+          numberOfChannels: 1,        
+          bitRate: 64000,  
           linearPCMBitDepth: 16,
           linearPCMIsBigEndian: false,
           linearPCMIsFloat: false,
@@ -83,7 +107,7 @@ export default function AudioRecordTab({ userId }) {
       setStatusMessage("Recording in progress...");
     } catch (error) {
       console.error("Failed to start recording", error);
-      setStatusMessage("Failed to start recording");
+      setStatusMessage("Failed to start recording" + String(error));
       setIsRecording(false);
     }
   }
@@ -95,13 +119,10 @@ export default function AudioRecordTab({ userId }) {
 
     try {
       await recording.stopAndUnloadAsync();
+      await deactivateKeepAwake();
 
-      // Get URI of recorded file
       const uri = recording.getURI();
       setStatusMessage("Recording stopped. Ready to submit.");
-      setRecording(recording);
-
-      // Store URI for submission later
       setRecording({ ...recording, uri });
     } catch (error) {
       console.error("Failed to stop recording", error);
@@ -117,15 +138,13 @@ export default function AudioRecordTab({ userId }) {
 
     try {
       setStatusMessage("Reading file and sending to server...");
-      // Read file as base64 string
       const base64data = await FileSystem.readAsStringAsync(recording.uri, {
         encoding: 'base64',
       });
 
-      // Emit to socket server omitting base64 prefix, similar to substring(22) in web example
       socket.emit("App Recording Submit", {
         stringVal: base64data,
-        senderId: thisId
+        senderId: thisId,
       });
 
       setStatusMessage("Audio submitted to server.");

@@ -1,6 +1,10 @@
-import generateScale from '../scripts/noteGenerator.js';
+
 
 import React, { Component, useEffect, useState } from 'react';
+
+import { NativeModules } from 'react-native';
+
+const { AudioSessionManager } = NativeModules;
 
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Link, Tabs } from 'expo-router';
@@ -9,6 +13,16 @@ import { Pressable } from 'react-native';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+
+async function disableAGCOnIOS() {
+  if (AudioSessionManager && AudioSessionManager.disableAGC) {
+    AudioSessionManager.disableAGC();
+    console.log('Requested AGC to be disabled on iOS');
+  } else {
+    console.warn('AudioSessionManager native module not available');
+  }
+}
+
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
@@ -20,8 +34,8 @@ function TabBarIcon(props: {
 
 export default function TabLayout() {
 
-  const [totalNotes, setTotalNotes] = useState(generateScale( {key:'E', types:['Major'], octaveNum:1} ));
   const colorScheme = useColorScheme();
+  disableAGCOnIOS();
 
   return (
     <Tabs
@@ -52,13 +66,13 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
+      {/* <Tabs.Screen
         name= "scaleSelect"
         options={{
           title: 'Scale Select Tab',
           tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
         }}
-      />
+      /> */}
     </Tabs>
   );
 }
