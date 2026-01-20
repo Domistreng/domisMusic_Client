@@ -26,7 +26,7 @@ Domis Music Client records audio from the microphone (without normalizing the si
 Clone the client repository and install dependencies:
 
 ```bash
-git clone https://github.com/your-username/domis-music-client.git
+git clone https://github.com/Domistreng/domisMusic_Client
 cd domis-music-client
 npm install
 # or
