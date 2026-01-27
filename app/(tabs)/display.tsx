@@ -281,6 +281,15 @@ const displayScreen: React.FC = () => {
     }
   };
 
+  const volumeSamples = React.useMemo(
+    () =>
+      Object.entries(notesAudio).map(([k, v]) => ({
+        t: parseFloat(k),
+        v: v as number,
+      })),
+    [notesAudio]
+  );
+
   // Helper function to get intensity label by value
   const getIntensityLabel = (value: number): string => {
     if (value >= 2) return 'FF';
@@ -510,7 +519,7 @@ const displayScreen: React.FC = () => {
                 <IntonationStringDisplay currentNote={currentNote}/>
               </View>
               <View style={{ flex: 1 }} key="2">
-                <DynamicsStringDisplay currentAudioValue={currentAudioValue} currentAudioLabel={currentAudioLabel}/>
+                <DynamicsStringDisplay currentAudioValue={currentAudioValue} currentAudioLabel={currentAudioLabel} positionSeconds={positionMillis / 1000} samples={volumeSamples}/>
               </View>
             </PagerView>
             
